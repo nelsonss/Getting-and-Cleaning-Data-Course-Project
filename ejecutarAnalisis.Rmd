@@ -1,0 +1,155 @@
+---
+title: "ejecutarAnalisis"
+author: "Nelson Sánchez Sánchez"
+date: "2/11/2020"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+```
+
+##############################################################################
+# PASO 1 - Obtener Datos
+##############################################################################
+
+## Descargar los datos
+
+Definir la ruta en donde se encuentra el archivo con los datos y asignar un nombre con el cuál quedará almacenado el archivo en una carpeta local.
+
+```{r}
+zipUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
+zipFile <- "UCI HAR Dataset.zip"
+```
+
+Descargar el archivo si este todavía no ha sido colocado en una carpeta local
+```{r}
+if (!file.exists(zipFile)) {
+  download.file(zipUrl, zipFile, mode = "wb")
+}
+```
+# Descomprimir el archivo que contiene los datos si aún no se ha realizado
+
+```{r}
+dataPath <- "UCI HAR Dataset"
+if (!file.exists(dataPath)) {
+  unzip(zipFile)
+}
+```
+
+##############################################################################
+# PASO 2 - Leer los datos
+##############################################################################
+
+#   Leer los datos de ENTRENAMIENTO
+```{r}
+trainingSubjects <- read.table(file.path(dataPath, "train", "subject_train.txt"))
+trainingValues <- read.table(file.path(dataPath, "train", "X_train.txt"))
+trainingActivity <- read.table(file.path(dataPath, "train", "y_train.txt"))
+```
+
+#   Leer los datos de PRUEBA
+```{r}
+testSubjects <- read.table(file.path(dataPath, "test", "subject_test.txt"))
+testValues <- read.table(file.path(dataPath, "test", "X_test.txt"))
+testActivity <- read.table(file.path(dataPath, "test", "y_test.txt"))
+```
+#   Leer la características (features), sin convertir los text labels a factores
+```{r}
+features <- read.table(file.path(dataPath, "features.txt"), as.is = TRUE)
+```
+#   Leer las actividades
+```{r}
+activities <- read.table(file.path(dataPath, "activity_labels.txt"))
+colnames(activities) <- c("activityId", "activityLabel")
+```
+
+##############################################################################
+# Paso 3 - Mezclar los datos de prueba y los datos de entrenamiento 
+#          para crear un solo data set
+##############################################################################
+
+#   Concatenar las tablas individuales de datos y construir un solo data set
+```{r}
+humanActivity <- rbind(
+  cbind(trainingSubjects, trainingValues, trainingActivity),
+  cbind(testSubjects, testValues, testActivity)
+)
+```
+
+#   Eliminar de la memoria las tablas individuales para ahorrar espacio
+```{r}
+rm(trainingSubjects, trainingValues, trainingActivity, 
+   testSubjects, testValues, testActivity)
+```
+#   Asignar nombres a las columnas
+```{r}
+colnames(humanActivity) <- c("subject", features[, 2], "activity")
+```
+
+##############################################################################
+# Paso 4 - Extraer solo las medidas relacionadas con la media y la desviación 
+#          estandar para cada medición
+##############################################################################
+
+#         Determinar que columnas de data set se usarán tomando como base 
+#         los nombres de las columnas y mantener solo los datos de estas
+#         columnas para el análisis
+```{r}
+columnsToKeep <- grepl("subject|activity|mean|std", colnames(humanActivity))
+humanActivity <- humanActivity[, columnsToKeep]
+```
+
+##############################################################################
+# Paso 5 - Usar nombres descriptivos para cada una de las actividades
+#          dentro del data set reemplazar valores por factores con nombre
+##############################################################################
+```{r}
+humanActivity$activity <- factor(humanActivity$activity, 
+  levels = activities[, 1], labels = activities[, 2])
+```
+
+##############################################################################
+# Paso 6 - Etiquetar los data set con nombres de variables descriptivos
+#          tomar los nombres de las columnas, quitar los caracteres especiales
+##############################################################################
+```{r}
+humanActivityCols <- colnames(humanActivity)
+humanActivityCols <- gsub("[\\(\\)-]", "", humanActivityCols)
+```
+#          reemplazar las abreviaturas por nombres completos
+```{r}
+humanActivityCols <- gsub("^f", "frequencyDomain", humanActivityCols)
+humanActivityCols <- gsub("^t", "timeDomain", humanActivityCols)
+humanActivityCols <- gsub("Acc", "Accelerometer", humanActivityCols)
+humanActivityCols <- gsub("Gyro", "Gyroscope", humanActivityCols)
+humanActivityCols <- gsub("Mag", "Magnitude", humanActivityCols)
+humanActivityCols <- gsub("Freq", "Frequency", humanActivityCols)
+humanActivityCols <- gsub("mean", "Mean", humanActivityCols)
+humanActivityCols <- gsub("std", "StandardDeviation", humanActivityCols)
+```
+#          corregir errores o palabras repetidas
+```{r}
+humanActivityCols <- gsub("BodyBody", "Body", humanActivityCols)
+```
+
+#          usar nuevas etiquetas para los nombres de las columnas
+```{r}
+colnames(humanActivity) <- humanActivityCols
+```
+
+##############################################################################
+# Paso 6 - Crear un segundo e independiente tidy set con el promedio de cada 
+#          variable para cada actividad y cada tema
+#          agrupar por tema y actividad y resumir usando el promedio (mean)
+##############################################################################
+```{r}
+humanActivityMeans <- humanActivity %>% 
+  group_by(subject, activity) %>%
+  summarise_each(funs(mean))
+```
+##############################################################################
+# Paso 7. Almacenar el resultado en el archivo "tidy_data.txt"
+```{r}
+write.table(humanActivityMeans,"tidy_data.txt",row.names = FALSE,quote = FALSE)
+```
